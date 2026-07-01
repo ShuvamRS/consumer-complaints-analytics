@@ -1,0 +1,9 @@
+# Local raw data
+local_data/
+*.csv
+*.zip
+
+# Notebook/system files
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
