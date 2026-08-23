@@ -1,10 +1,63 @@
 # CFPB Consumer Complaints Analytics
 
-This project analyzes consumer financial complaints from the CFPB Consumer Complaint Database using Microsoft Fabric and Power BI.
+An end-to-end Microsoft Fabric lakehouse and Power BI solution built on **17.4 million consumer complaints from 2011–2026**.
 
-I built an end-to-end analytics workflow that takes a large raw complaints dataset, processes it through Bronze, Silver, and Gold layers, and turns it into a Power BI dashboard for exploring complaint trends, product and issue drivers, geographic patterns, and company response performance.
+The project combines a bulk historical load, scheduled incremental ingestion from the CFPB API, and a targeted backfill process for repairing date gaps. PySpark and Delta tables support data cleaning, validation, deduplication, and incremental merges before the data is published through a Power BI star schema.
 
-## Dashboard Preview
+**Technology:** Microsoft Fabric · Fabric Data Factory · PySpark · Spark SQL · Delta Lake · Power BI · DAX
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph SRC["Data sources"]
+        H["Bulk CFPB CSV\nHistorical load"]
+        B["Filtered CFPB CSV\nRecovery backfill"]
+        A["CFPB API\nDaily incremental load"]
+    end
+
+    subgraph BRZ["Bronze Delta tables"]
+        BF["bronze.complaints"]
+        BA["bronze.cfpb_complaints_api"]
+    end
+
+    subgraph SLV["Silver processing"]
+        P["PySpark cleaning and validation"]
+        S["silver.complaints"]
+        Q["quarantine.complaints"]
+    end
+
+    subgraph GLD["Gold star schema"]
+        D["Dimensions\nDate · Location · Product and Issue"]
+        F["Fact\nComplaints"]
+    end
+
+    O["Fabric Data Factory pipeline\nAPI orchestration and model refresh"]
+    M["Power BI semantic model"]
+    R["Power BI report"]
+
+    H --> BF
+    B --> BF
+    A --> BA
+
+    BF --> P
+    BA --> P
+
+    P --> S
+    P --> Q
+
+    S --> D
+    S --> F
+
+    D --> M
+    F --> M
+    M --> R
+
+    O -. "runs daily" .-> A
+    O -. "refreshes" .-> M
+```
+
+## Dashboard
 
 ### Executive Overview
 
@@ -12,174 +65,74 @@ I built an end-to-end analytics workflow that takes a large raw complaints datas
 
 ### Product, Issue & Response Analysis
 
-![Product Issue Response Analysis](screenshots/02_dashboard_product_issue_response.png)
+![Product, Issue and Response Analysis](screenshots/02_dashboard_product_issue_response.png)
 
 ### Location & Forwarding Performance
 
-![Location Forwarding Performance](screenshots/03_dashboard_location_forwarding_performance.png)
+![Location and Forwarding Performance](screenshots/03_dashboard_location_forwarding_performance.png)
 
-## What This Dashboard Helps Answer
+## Implementation
 
-- Which financial products receive the most complaints?
-- Which complaint issues appear most often?
-- How has complaint volume changed over time?
-- Which states have the highest complaint volume?
-- How are complaints submitted?
-- How quickly are complaints forwarded to companies?
-- What percentage of complaints receive timely responses?
+* **Historical backfill:** Loads the CFPB bulk CSV through Bronze, Silver, and Gold to establish the initial dataset.
+* **Incremental API load:** Retrieves newly published complaints, merges them into the shared Silver and Gold tables, and refreshes the Power BI semantic model.
+* **Recovery backfill:** Processes a filtered CSV for a defined date range without rebuilding the complete dataset.
+* **Data quality:** Validates required fields, parses dates, standardizes state and ZIP code values, and routes invalid records to a quarantine table.
+* **Duplicate protection:** Reduces incremental source data to one row per `complaint_id` before Delta merges.
 
-## Tech Stack
+## Pipeline Orchestration
 
-Built with **Microsoft Fabric, PySpark, Spark SQL, Delta tables, Power BI, semantic modeling, and DAX**.
+The scheduled Fabric Data Factory pipeline runs the API Bronze, Silver, and Gold notebooks in sequence, followed by the semantic model refresh. Downstream activities run only after the preceding activity succeeds.
 
-## Project Workflow
-
-```text
-Raw CFPB CSV
-   ↓
-Bronze Layer
-   ↓
-Silver Layer
-   ↓
-Gold Tables
-   ↓
-Power BI Semantic Model
-   ↓
-Power BI Dashboard
-```
-
-## Data Engineering Process
-
-### Bronze Layer
-
-The Bronze layer stores the raw CFPB complaints data after ingestion into the Fabric Lakehouse.
-
-### Silver Layer
-
-The Silver layer applies the main cleaning and validation steps:
-
-- removed exact duplicate rows
-- checked required fields
-- parsed date columns
-- separated records with invalid date order
-- standardized state and ZIP code fields
-- added ZIP code status flags
-- kept problematic records in a quarantine table instead of silently dropping them
-
-### Gold Layer
-
-The Gold layer creates reporting-ready tables for Power BI:
-
-- `gold.dim_date`
-- `gold.dim_location`
-- `gold.dim_product_issue`
-- `gold.fact_complaints`
-
-These tables were used to build the Power BI semantic model and dashboard.
+![Successful Fabric pipeline run](screenshots/05_cfpb_api_pipeline_success.png)
 
 ## Semantic Model
 
-The Power BI semantic model connects the fact table to the dimension tables using a simple star-schema style design.
+The reporting model contains one complaint-level fact table and three supporting dimensions:
 
-![Semantic Model Relationships](screenshots/04_semantic_model_relationships.png)
+* `gold.fact_complaints`
+* `gold.dim_date`
+* `gold.dim_location`
+* `gold.dim_product_issue`
 
-Main relationships:
-
-```text
-fact_complaints[date_received]       → dim_date[date]
-fact_complaints[location_key]        → dim_location[location_key]
-fact_complaints[product_issue_key]   → dim_product_issue[product_issue_key]
-```
-
-## Dashboard Pages
-
-### 1. Executive Overview
-
-This page gives a high-level view of complaint volume, timely response rate, average days to company, total companies, monthly complaint trends, submission channels, and complaint volume by state.
-
-### 2. Product, Issue & Response Analysis
-
-This page focuses on the products and issues driving complaint volume. It also includes company response patterns and timely response behavior.
-
-### 3. Location & Forwarding Performance
-
-This page shows where complaints are concentrated and how long it takes complaints to be forwarded to companies.
-
-## DAX Measures
-
-A few key DAX measures were created for the dashboard.
-
-```DAX
-Total Complaints =
-COUNTROWS(fact_complaints)
-```
-
-```DAX
-Timely Complaints =
-CALCULATE(
-    COUNTROWS(fact_complaints),
-    fact_complaints[timely_response] = "Yes"
-)
-```
-
-```DAX
-Timely Response Rate =
-DIVIDE(
-    [Timely Complaints],
-    [Total Complaints]
-)
-```
-
-```DAX
-Avg Days to Company =
-AVERAGE(fact_complaints[response_days])
-```
-
-```DAX
-Total Companies =
-DISTINCTCOUNT(fact_complaints[company])
-```
-
-```DAX
-Total Issues =
-DISTINCTCOUNT(dim_product_issue[issue])
-```
+![Power BI semantic model](screenshots/04_semantic_model_relationships.png)
 
 ## Repository Structure
 
 ```text
-financial-complaints-intelligence-platform/
+consumer-complaints-analytics/
 ├── README.md
 ├── notebooks/
-│   ├── 01_bronze_ingestion.ipynb
-│   ├── 02_silver_cleaning.ipynb
-│   └── 03_gold_tables.ipynb
+│   ├── historical_backfill/
+│   │   ├── bronze.ipynb
+│   │   ├── silver.ipynb
+│   │   └── gold.ipynb
+│   ├── api/
+│   │   ├── bronze_cfpb.ipynb
+│   │   ├── silver_cfpb.ipynb
+│   │   └── gold_cfpb.ipynb
+│   └── batch_backfill/
+│       ├── bronze_cfpb_batch.ipynb
+│       ├── silver_cfpb_batch.ipynb
+│       └── gold_cfpb_batch.ipynb
 ├── screenshots/
 │   ├── 01_dashboard_executive_overview.png
 │   ├── 02_dashboard_product_issue_response.png
 │   ├── 03_dashboard_location_forwarding_performance.png
-│   └── 04_semantic_model_relationships.png
+│   ├── 04_semantic_model_relationships.png
+│   └── 05_cfpb_api_pipeline_success.png
 └── .gitignore
 ```
 
-## How to Reproduce
+## Running the Project
 
-1. Download the dataset from the [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-research/consumer-complaints/).
-2. Extract the downloaded file.
-3. Upload `complaints.csv` into the Fabric Lakehouse raw folder.
-4. Run the notebooks in order:
+1. Download the bulk dataset from the [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-research/consumer-complaints/).
+2. Upload `complaints.csv` to a Microsoft Fabric Lakehouse.
+3. Attach the Lakehouse to the notebooks and configure the source path.
+4. Run the historical notebooks in Bronze, Silver, and Gold order.
+5. Create the Power BI semantic model from the Gold tables.
+6. Configure the Fabric pipeline with the three API notebooks and semantic model refresh activity.
+7. Use the batch-backfill notebooks only when a defined historical range needs to be recovered.
 
-```text
-01_bronze_ingestion
-02_silver_cleaning
-03_gold_tables
-```
+## Dataset
 
-5. Create a Power BI semantic model using the Gold tables.
-6. Create relationships between the fact table and dimension tables.
-7. Add the DAX measures.
-8. Build the Power BI dashboard.
-
-## Dataset Note
-
-The raw CFPB complaints dataset is not included in this repository because the extracted CSV file is about 8.8 GB. To reproduce the project, download the dataset from the [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-research/consumer-complaints/) and run the notebooks in order.
+The extracted CFPB complaints CSV is approximately **8.8 GB** and is not included in this repository. It can be downloaded directly from the [CFPB website](https://www.consumerfinance.gov/data-research/consumer-complaints/).
