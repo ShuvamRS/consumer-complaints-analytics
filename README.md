@@ -55,6 +55,29 @@ flowchart TB
 
     O -. "runs daily" .-> A
     O -. "refreshes" .-> M
+
+    classDef source fill:#E8F1FB,stroke:#2F6FA7,color:#17324D,stroke-width:1.5px
+    classDef bronze fill:#F8E7D0,stroke:#A9681F,color:#4A2A0A,stroke-width:1.5px
+    classDef silver fill:#EEF1F4,stroke:#66788A,color:#253444,stroke-width:1.5px
+    classDef quarantine fill:#FCE8E8,stroke:#B84A4A,color:#642525,stroke-width:1.5px
+    classDef gold fill:#FFF3C4,stroke:#B78A00,color:#4D3A00,stroke-width:1.5px
+    classDef pipeline fill:#E4F4F1,stroke:#23806F,color:#154D43,stroke-width:1.5px
+    classDef report fill:#0B3B75,stroke:#082B54,color:#FFFFFF,stroke-width:2px
+
+    class H,B,A source
+    class BF,BA bronze
+    class P,S silver
+    class Q quarantine
+    class D,F gold
+    class O pipeline
+    class M,R report
+
+    style SRC fill:#F6F9FC,stroke:#A9BED3,stroke-width:1px,color:#1F2937
+    style BRZ fill:#FFF9F2,stroke:#D5A468,stroke-width:1px,color:#1F2937
+    style SLV fill:#F7F9FB,stroke:#A8B3BF,stroke-width:1px,color:#1F2937
+    style GLD fill:#FFFBEE,stroke:#D3B550,stroke-width:1px,color:#1F2937
+
+    linkStyle default stroke:#64748B,stroke-width:1.5px
 ```
 
 ## Dashboard
